@@ -10,9 +10,36 @@ Standards-Version: 3.9.6
 
 Package: apulse
 Architecture: linux-any
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: libapulse (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Suggests: skype
 Description: PulseAudio emulation for ALSA
  This program may be useful for users who do not want install and use PulseAudio
  audio server on own systems, but nevertheless want to use some programs which
  require PulseAudio for their work (for example, Skype and some other).
+
+Package: libapulse
+Architecture: linux-any
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Suggests: apulse
+Multi-Arch: same
+Description: PulseAudio emulation for ALSA - the libapulse libraries
+ This program may be useful for users who do not want install and use PulseAudio
+ audio server on own systems, but nevertheless want to use some programs which
+ require PulseAudio for their work (for example, Skype and some other).
+ .
+ This package contains the libapulse library files used by apulse.
+
+Package: libapulse-dev
+Architecture: linux-any
+Pre-Depends: ${misc:Pre-Depends}
+Depends: libapulse (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
+Suggests: apulse
+Multi-Arch: same
+Description: PulseAudio emulation for ALSA - the libapulse devel libraries
+ This program may be useful for users who do not want install and use PulseAudio
+ audio server on own systems, but nevertheless want to use some programs which
+ require PulseAudio for their work (for example, Skype and some other).
+ .
+ This package contains the libapulse devel libraries files used by apulse.
+
