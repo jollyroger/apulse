@@ -1,0 +1,34 @@
+1707648 (tag: v0.1.5) add some more trace messages
+8a8bcc6 add -pthread, fix link order
+533b161 (tag: v0.1.4) set avail min to period size
+07e304e impl pa_xmalloc0
+b4eb4c4 pulse-common: add stubs for pa_disable_sigpipe, pa_open_cloexec, pa_close
+74cc319 impl pa_proplist_contains, pa_proplist_gets
+181f895 impl pa_log_level_meta
+f7baa59 fix missing symbols in libpulse-simple
+1080e4a use snd_pcm_hw_params_set_rate_near()
+be2a943 mention Skype as a 32-bit application
+df15485 fix build on Debian Squeeze
+1a86fdb (tag: v0.1.3) use WITH_TRACE macro rather than NDEBUG to enable tracing messages
+8657b6f clearly express project status
+5766d18 document environment variables for runtime device selection
+175e0bf (tag: v0.1.2) add USE_BUNDLED_PULSEAUDIO_HEADERS configure time parameter
+1a904e9 allow playback/capture device to be selected
+6e9aafa stop requesting period event
+2b44920 (tag: v0.1.1) allow APULSEPATH to be configured
+4e8cb95 doc: fix typo
+1a74ba1 (tag: v0.1.0) apulse-operation: fix typo-bug in deh_perform_operation()
+06d1211 quote string containing source directory/version script
+6099003 fix running tests on machines with CTest installed to "/Program Files"
+9dc6082 quote variables in CMakeLists.txt to support spaces in prefix name
+1f1c4fb doc: update 32-bit build instructions
+5931b33 bundle PulseAudio headers
+b9b0d96 handle parameters with spaces in apulse wrapper
+1cc6082 require libpulse>=5.0
+ac2cad2 operation: fix NULL dereference in ref/unref
+f6f9260 context: fix NULL dereference in ref/unref
+6556486 doc: describe compilation steps
+e538ad9 stream: fix uninitialized variable warning in data_available_for_stream
+ad10913 ringbuffer: pointer arithmetic fixes
+040b72b initial public version
+ca9a34f initial
