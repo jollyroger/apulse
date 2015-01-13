@@ -1,0 +1,2 @@
+package-name-doesnt-match-sonames libpulse-simple0 libpulse0 libpulsecommon-5.0
+dev-pkg-without-shlib-symlink

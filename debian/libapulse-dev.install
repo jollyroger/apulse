@@ -1,1 +1,2 @@
-usr/lib/*/*.so
+usr/lib/*/libpulse.so
+usr/lib/*/libpulse-simple.so
