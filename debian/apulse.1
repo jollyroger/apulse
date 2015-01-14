@@ -1,0 +1,24 @@
+.\" man page originally for the Debian/GNU Linux system
+.TH APULSE "1" "January 2015" "apulse 0.1.5" "User Commands"
+.SH NAME
+apulse \- PulseAudio emulation for ALSA.
+.SH SYNOPSIS
+.B apulse
+.br
+.SH DESCRIPTION
+.PP
+gxkb is a PulseAudio emulator for ALSA.
+Project is in stale state since its proclamation. The main
+objective, working Skype test call, is reached. The author
+don't have any plans for further development.
+.SH USAGE
+.TP
+.B apulse <program-name> [\fparameters\fR]
+Environment variables APULSE_CAPTURE_DEVICE and
+APULSE_PLAYBACK_DEVICE can be used to configure capture and
+playback devices. Try hw:0,0, plughw:0,0 and the like. Refer
+to the ALSA user guide for a full list of device names.
+.SH AUTHOR
+gxkb was written by Rinat Ibragimov <ibragimovrinat@mail.ru>.
+This manual page was originally written for the
+Debian GNU/Linux system by Mateusz Łukasik <mati75@linuxmint.pl>.
