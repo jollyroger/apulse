@@ -1,7 +1,7 @@
 Source: apulse
 Section: sound
 Priority: optional
-Maintainer: Mateusz Łukasik <mati75@debian.org>
+Maintainer: Mateusz Łukasik <mati75@linuxmint.pl>
 Build-Depends: debhelper (>= 9), cmake, libglib2.0-dev, libasound2-dev, libpulse-dev (>= 5.0)
 Homepage: https://github.com/i-rinat/apulse
 Vcs-Git: git://github.com/mati75/apulse.git
