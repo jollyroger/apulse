@@ -23,8 +23,6 @@ Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Suggests: apulse
 Multi-Arch: same
-Provides: libpulse0
-Replaces: libpulse0
 Description: PulseAudio emulation for ALSA - the libapulse libraries
  This program may be useful for users who do not want install and use PulseAudio
  audio server on own systems, but nevertheless want to use some programs which
@@ -39,8 +37,6 @@ Pre-Depends: ${misc:Pre-Depends}
 Depends: libapulse (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Suggests: apulse
 Multi-Arch: same
-Provides: libpulse-dev
-Replaces: libpulse-dev
 Description: PulseAudio emulation for ALSA - the libapulse devel libraries
  This program may be useful for users who do not want install and use PulseAudio
  audio server on own systems, but nevertheless want to use some programs which
