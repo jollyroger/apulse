@@ -1,2 +1,2 @@
-usr/lib/*/*.so.*
-usr/lib/*/libpulsecommon-5.0.so
+usr/lib/*/apulse/*.so.*
+usr/lib/*/apulse/libpulsecommon-5.0.so
