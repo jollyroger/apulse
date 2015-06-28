@@ -1,3 +1,9 @@
+apulse (0.1.6-1~bpo8+1) jessie-backports; urgency=medium
+
+  * Rebuild for jessie-backports.
+
+ -- Mateusz Łukasik <mati75@linuxmint.pl>  Sun, 28 Jun 2015 17:04:23 +0200
+
 apulse (0.1.6-1) unstable; urgency=medium
 
   * Initial release. (Closes: #775098)
