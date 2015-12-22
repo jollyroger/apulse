@@ -232,17 +232,21 @@ pa_operation *
 pa_context_set_source_volume_by_index(pa_context *c, uint32_t idx, const pa_cvolume *volume,
                                       pa_context_success_cb_t cb, void *userdata)
 {
-    trace_info("Z %s c=%p, idx=%u, volume=%p, cb=%p, userdata=%p\n", __func__, c, idx, volume,
+    gchar *s_volume = trace_pa_volume_as_string(volume);
+    trace_info("Z %s c=%p, idx=%u, volume=%s, cb=%p, userdata=%p\n", __func__, c, idx, s_volume,
                cb, userdata);
+    g_free(s_volume);
 
-    return NULL;
+    // TODO: actually change volume
+    return pa_operation_new(c->mainloop_api, PAOP_CONTEXT_SET_SOURCE_VOLUME_BY_INDEX, c,
+                            NULL, cb, userdata);
 }
 
 APULSE_EXPORT
 void
 pa_context_set_subscribe_callback(pa_context *c, pa_context_subscribe_cb_t cb, void *userdata)
 {
-    trace_info("Z %s\n", __func__);
+    trace_info("Z %s c=%p, cb=%p, userdata=%p\n", __func__, c, cb, userdata);
 }
 
 APULSE_EXPORT
@@ -250,7 +254,7 @@ pa_operation *
 pa_context_subscribe(pa_context *c, pa_subscription_mask_t m, pa_context_success_cb_t cb,
                      void *userdata)
 {
-    trace_info("Z %s\n", __func__);
+    trace_info("Z %s c=%p, m=0x%04x, cb=%p, userdata=%p\n", __func__, c, m, cb, userdata);
 
     return NULL;
 }

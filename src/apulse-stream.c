@@ -190,9 +190,6 @@ do_connect_pcm(pa_stream *s, snd_pcm_stream_t stream_direction)
     unsigned int period_time = 20 * 1000;
     dir = 1;
     CHECK_A(snd_pcm_hw_params_set_period_time_near, (s->ph, hw_params, &period_time, &dir));
-    dir = -1;
-    snd_pcm_uframes_t period_size;
-    CHECK_A(snd_pcm_hw_params_get_period_size, (hw_params, &period_size, &dir));
 
     unsigned int buffer_time = 4 * period_time;
     dir = 1;
@@ -202,6 +199,8 @@ do_connect_pcm(pa_stream *s, snd_pcm_stream_t stream_direction)
 
     CHECK_A(snd_pcm_sw_params_malloc, (&sw_params));
     CHECK_A(snd_pcm_sw_params_current, (s->ph, sw_params));
+
+    const snd_pcm_uframes_t period_size = (uint64_t)period_time * rate / (1000 * 1000);
     CHECK_A(snd_pcm_sw_params_set_avail_min, (s->ph, sw_params, period_size));
     // no period event requested
     CHECK_A(snd_pcm_sw_params, (s->ph, sw_params));
@@ -231,6 +230,39 @@ do_connect_pcm(pa_stream *s, snd_pcm_stream_t stream_direction)
     return 0;
 err:
     return -1;
+}
+
+APULSE_EXPORT
+int
+pa_stream_begin_write(pa_stream *p, void **data, size_t *nbytes)
+{
+    trace_info("F %s p=%p\n", __func__, p);
+
+    free(p->write_buffer);
+
+    if (*nbytes == (size_t)-1)
+        *nbytes = 8192;
+
+    p->write_buffer = malloc(*nbytes);
+
+    if (!p->write_buffer)
+        return -1;
+
+    *data = p->write_buffer;
+
+    return 0;
+}
+
+APULSE_EXPORT
+int
+pa_stream_cancel_write(pa_stream *p)
+{
+    trace_info("F %s p=%p\n", __func__, p);
+
+    free(p->write_buffer);
+    p->write_buffer = NULL;
+
+    return 0;
 }
 
 APULSE_EXPORT
@@ -474,7 +506,7 @@ pa_stream_new_with_proplist(pa_context *c, const char *name, const pa_sample_spe
     s->timing_info.configured_source_usec = 0;
     s->timing_info.since_underrun = 0;
 
-    s->rb = ringbuffer_new(50 * 1024);    // TODO: figure out size
+    s->rb = ringbuffer_new(72 * 1024);    // TODO: figure out size
     s->peek_buffer = malloc(s->rb->end - s->rb->start);
 
     return s;
@@ -550,6 +582,7 @@ pa_stream_unref(pa_stream *s)
         g_hash_table_remove(s->c->streams_ht, GINT_TO_POINTER(s->idx));
         ringbuffer_free(s->rb);
         free(s->peek_buffer);
+        free(s->write_buffer);
         free(s->name);
         free(s);
     }
@@ -570,7 +603,19 @@ pa_stream_writable_size(pa_stream *s)
 {
     trace_info("F %s s=%p\n", __func__, s);
 
-    return ringbuffer_writable_size(s->rb);
+    size_t writable_size = ringbuffer_writable_size(s->rb);
+
+    // Some applications try to push more data than reported to be available
+    // by pa_stream_writable_size(), which is fine for original PulseAudio
+    // but is a severe error in this implementation, since buffer size is
+    // limited.
+    //
+    // Workaround issue by reserving certain amount for that case.
+
+    const size_t limit = 16 * 1024; // TODO: adaptive values?
+
+    return writable_size >= limit ? writable_size
+                                  : 0;
 }
 
 APULSE_EXPORT
@@ -597,8 +642,14 @@ pa_stream_write(pa_stream *s, const void *data, size_t nbytes, pa_free_cb_t free
     size_t written = ringbuffer_write(s->rb, data, nbytes);
     s->timing_info.since_underrun += written;
     s->timing_info.write_index += written;
-    if (free_cb)
-        free_cb((void *)data);
+
+    if (data == s->write_buffer) {
+        free(s->write_buffer);
+        s->write_buffer = NULL;
+    } else {
+        if (free_cb)
+            free_cb((void *)data);
+    }
 
     return 0;
 }
@@ -656,9 +707,18 @@ APULSE_EXPORT
 uint32_t
 pa_stream_get_device_index(pa_stream *s)
 {
-    trace_info("Z %s s=%p\n", __func__, s);
+    trace_info("F %s s=%p\n", __func__, s);
 
+    // apulse uses only one sink -- ALSA device, so index is always 0
     return 0;
+}
+
+APULSE_EXPORT
+const char *
+pa_stream_get_device_name(pa_stream *s)
+{
+    trace_info("F %s s=%p\n", __func__, s);
+    return "apulse";
 }
 
 APULSE_EXPORT
