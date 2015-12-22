@@ -104,13 +104,6 @@ int pa_proplist_setf(pa_proplist *p, const char *key, const char *format, ...)
 }
 
 APULSE_EXPORT
-int pa_proplist_set(pa_proplist *p, const char *key, const void *data, size_t nbytes)
-{
-    trace_info("Z %s\n", __func__);
-    return 0;
-}
-
-APULSE_EXPORT
 int pa_proplist_get(pa_proplist *p, const char *key, const void **data, size_t *nbytes)
 {
     trace_info("Z %s\n", __func__);
@@ -195,21 +188,7 @@ pa_channel_map* pa_channel_map_init(pa_channel_map *m)
 }
 
 APULSE_EXPORT
-pa_channel_position_t pa_channel_position_from_string(const char *s)
-{
-    trace_info("Z %s\n", __func__);
-    return 0;
-}
-
-APULSE_EXPORT
 const char* pa_channel_position_to_pretty_string(pa_channel_position_t pos)
-{
-    trace_info("Z %s\n", __func__);
-    return NULL;
-}
-
-APULSE_EXPORT
-pa_channel_map *pa_channel_map_parse(pa_channel_map *map, const char *s)
 {
     trace_info("Z %s\n", __func__);
     return NULL;
@@ -806,27 +785,6 @@ pa_context* pa_stream_get_context(pa_stream *p)
 {
     trace_info("Z %s\n", __func__);
     return NULL;
-}
-
-APULSE_EXPORT
-const char *pa_stream_get_device_name(pa_stream *s)
-{
-    trace_info("Z %s\n", __func__);
-    return NULL;
-}
-
-APULSE_EXPORT
-int pa_stream_begin_write(pa_stream *p, void **data, size_t *nbytes)
-{
-    trace_info("Z %s\n", __func__);
-    return 0;
-}
-
-APULSE_EXPORT
-int pa_stream_cancel_write(pa_stream *p)
-{
-    trace_info("Z %s\n", __func__);
-    return 0;
 }
 
 APULSE_EXPORT
@@ -1460,13 +1418,6 @@ char *pa_get_fqdn(char *s, size_t l)
 
 APULSE_EXPORT
 char *pa_get_home_dir(char *s, size_t l)
-{
-    trace_info("Z %s\n", __func__);
-    return NULL;
-}
-
-APULSE_EXPORT
-char *pa_get_binary_name(char *s, size_t l)
 {
     trace_info("Z %s\n", __func__);
     return NULL;
