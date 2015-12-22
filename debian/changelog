@@ -1,5 +1,5 @@
-apulse (0.1.6-1) unstable; urgency=medium
+apulse (0.1.7-1) unstable; urgency=medium
 
   * Initial release. (Closes: #775098)
 
- -- Mateusz Łukasik <mati75@linuxmint.pl>  Wed, 17 Jun 2015 08:25:26 +0200
+ -- Mateusz Łukasik <mati75@linuxmint.pl>  Tue, 22 Dec 2015 22:07:49 +0100
