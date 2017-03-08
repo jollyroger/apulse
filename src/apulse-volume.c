@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014-2015  Rinat Ibragimov
+ * Copyright © 2014-2017  Rinat Ibragimov
  *
  * This file is part of "apulse" project.
  *
@@ -22,43 +22,34 @@
  * SOFTWARE.
  */
 
-#ifndef APULSE__TRACE_H
-#define APULSE__TRACE_H
+#include "apulse.h"
+#include "trace.h"
+#include <assert.h>
+#include <math.h>
 
-#include <glib.h>
-#include <pulse/pulseaudio.h>
+APULSE_EXPORT
+pa_volume_t
+pa_sw_volume_from_linear(double v)
+{
+    trace_info_f("F %s v=%f\n", __func__, v);
 
-#if WITH_TRACE >= 2
+    if (v <= 0.0)
+        return PA_VOLUME_MUTED;
 
-#define trace_info_f(...)   trace_info(__VA_ARGS__)
-#define trace_info_z(...)   trace_info(__VA_ARGS__)
+    int64_t v_linear = lround(PA_VOLUME_NORM * cbrt(v));
+    assert(v_linear >= 0);
 
-#elif WITH_TRACE == 1
+    return MIN(v_linear, PA_VOLUME_MAX);
+}
 
-#define trace_info_f(...)
-#define trace_info_z(...)   trace_info(__VA_ARGS__)
+APULSE_EXPORT
+double
+pa_sw_volume_to_linear(pa_volume_t v)
+{
+    trace_info_f("F %s v=%u\n", __func__, v);
 
-#else // WITH_TRACE == 0
+    uint32_t v_clamped = MIN(v, PA_VOLUME_MAX);
 
-#define trace_info_f(...)
-#define trace_info_z(...)
-
-#endif
-
-void    trace_info(const char *fmt, ...) __attribute__((format (printf, 1, 2)));
-void    trace_warning(const char *fmt, ...) __attribute__((format (printf, 1, 2)));
-void    trace_error(const char *fmt, ...) __attribute__((format (printf, 1, 2)));
-
-gchar *
-trace_pa_buffer_attr_as_string(const pa_buffer_attr *attr);
-
-gchar *
-trace_pa_volume_as_string(const pa_cvolume *v);
-
-void
-trace_lock(void);
-
-void
-trace_unlock(void);
-
-#endif // APULSE__TRACE_H
+    double v_linear = v_clamped * (1.0 / PA_VOLUME_NORM);
+    return v_linear * v_linear * v_linear;
+}

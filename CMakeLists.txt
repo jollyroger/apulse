@@ -7,8 +7,10 @@ find_package(PkgConfig REQUIRED)
 
 pkg_check_modules(REQ glib-2.0 alsa REQUIRED)
 
-# enable tracing for Debug builds
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DWITH_TRACE")
+set(WITH_TRACE 0 CACHE STRING "trace level: no tracing (0) / unimplemented only (1) / all (2)")
+
+# trace level
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DWITH_TRACE=${WITH_TRACE}")
 
 # link with pthread
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
@@ -40,9 +42,10 @@ add_library(pulse SHARED
     src/apulse-signal.c
     src/apulse-stream.c
     src/apulse-threaded-mainloop.c
-    src/util.c
-    src/ringbuffer.c
+    src/apulse-volume.c
     src/notimplemented.c
+    src/ringbuffer.c
+    src/util.c
 )
 
 add_library(pulse-simple SHARED
