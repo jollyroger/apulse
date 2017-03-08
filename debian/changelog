@@ -1,3 +1,13 @@
+apulse (0.1.8-1) UNRELEASED; urgency=medium
+
+  * New upstream release.
+  * debian/control:
+    + Bump dh version to 10.
+    + Bump Standards-Version to 3.9.8.
+    + Use secured VCS links.
+
+ -- Mateusz Łukasik <mati75@linuxmint.pl>  Wed, 08 Mar 2017 23:18:53 +0100
+
 apulse (0.1.7-1) unstable; urgency=medium
 
   * Initial release. (Closes: #775098)
