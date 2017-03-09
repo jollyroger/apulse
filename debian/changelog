@@ -1,4 +1,4 @@
-apulse (0.1.8-1) UNRELEASED; urgency=medium
+apulse (0.1.8-1) unstable; urgency=medium
 
   * New upstream release.
   * debian/control:
@@ -6,8 +6,9 @@ apulse (0.1.8-1) UNRELEASED; urgency=medium
     + Bump Standards-Version to 3.9.8.
     + Use secured VCS links.
   * debian/rules: Enable hardening.
+  * Drop lintian-override.
 
- -- Mateusz Łukasik <mati75@linuxmint.pl>  Wed, 08 Mar 2017 23:18:53 +0100
+ -- Mateusz Łukasik <mati75@linuxmint.pl>  Thu, 09 Mar 2017 08:00:45 +0100
 
 apulse (0.1.7-1) unstable; urgency=medium
 
