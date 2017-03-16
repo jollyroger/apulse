@@ -84,9 +84,13 @@ pa_sample_format_from_string(const char *str)
 }
 
 size_t
-pa_find_multiple_of(size_t number, size_t multiple_of)
+pa_find_multiple_of(size_t number, size_t multiple_of, int towards_larger_numbers)
 {
-    return number - (number % multiple_of);
+    if (multiple_of == 0)
+        return number;
+
+    size_t n = towards_larger_numbers ? (number + multiple_of - 1) : number;
+    return n - (n % multiple_of);
 }
 
 void
@@ -131,10 +135,10 @@ pa_apply_volume_multiplier(void *buf, size_t sz, const pa_volume_t volume[PA_CHA
     case PA_SAMPLE_S16NE:
         while (p < last) {
             for (uint32_t k = 0; k < channels && p < last; k++) {
-                uint16_t sample;
+                int16_t sample;
                 memcpy(&sample, p, sizeof(sample));
                 float sample_scaled = sample * fvol[k];
-                sample = CLAMP(sample_scaled, 0.0, 65535.0);
+                sample = CLAMP(sample_scaled, -32768.0, 32767.0);
                 memcpy(p, &sample, sizeof(sample));
                 p += sizeof(sample);
             }
