@@ -30,17 +30,6 @@
 
 #define HAVE_SND_PCM_AVAIL  SND_LIB_VERSION >= MAKE_SND_LIB_VERSION(1, 0, 18)
 
-#define CHECK_A(funcname, params)                                           \
-    do {                                                                    \
-        int errcode___ = funcname params;                                   \
-        if (errcode___ < 0) {                                               \
-            trace_error("%s, " #funcname ", %s\n", __func__,                \
-                        snd_strerror(errcode___));                          \
-            goto err;                                                       \
-        }                                                                   \
-    } while (0)
-
-
 static
 void
 deh_stream_state_changed(pa_mainloop_api *api, pa_defer_event *de, void *userdata)
@@ -78,7 +67,7 @@ data_available_for_stream(pa_mainloop_api *a, pa_io_event *ioe, int fd, pa_io_ev
     snd_pcm_sframes_t   frame_count;
     size_t              frame_size = pa_frame_size(&s->ss);
     char                buf[16 * 1024];
-    const size_t        buf_size = pa_find_multiple_of(sizeof(buf), frame_size);
+    const size_t        buf_size = pa_find_multiple_of(sizeof(buf), frame_size, 0);
     int                 paused = g_atomic_int_get(&s->paused);
 
     if (events & (PA_IO_EVENT_INPUT | PA_IO_EVENT_OUTPUT)) {
@@ -128,8 +117,9 @@ data_available_for_stream(pa_mainloop_api *a, pa_io_event *ioe, int fd, pa_io_ev
         } else {
             size_t writable_size = pa_stream_writable_size(s);
 
-            if (s->write_cb && writable_size > 0)
-                s->write_cb(s, writable_size, s->write_cb_userdata);
+            // Ask client for data, but only if we are ready for at least |minreq| bytes.
+            if (s->write_cb && writable_size >= s->buffer_attr.minreq)
+                s->write_cb(s, s->buffer_attr.minreq, s->write_cb_userdata);
 
             size_t bytecnt = MIN(buf_size, frame_count * frame_size);
             bytecnt = ringbuffer_read(s->rb, buf, bytecnt);
@@ -182,52 +172,173 @@ do_connect_pcm(pa_stream *s, snd_pcm_stream_t stream_direction)
 {
     snd_pcm_hw_params_t *hw_params;
     snd_pcm_sw_params_t *sw_params;
-    int dir;
-    unsigned int rate;
-    const char *dev_name;
+    int errcode;
+    const char *device_name;
+    const char *direction_name;
 
     switch (stream_direction) {
     default:
     case SND_PCM_STREAM_PLAYBACK:
-        dev_name = getenv("APULSE_PLAYBACK_DEVICE");
-        CHECK_A(snd_pcm_open, (&s->ph, dev_name ? dev_name : "default", stream_direction, 0));
+        device_name = getenv("APULSE_PLAYBACK_DEVICE");
+        direction_name = "playback";
         break;
     case SND_PCM_STREAM_CAPTURE:
-        dev_name = getenv("APULSE_CAPTURE_DEVICE");
-        CHECK_A(snd_pcm_open, (&s->ph, dev_name ? dev_name : "default", stream_direction, 0));
+        device_name = getenv("APULSE_CAPTURE_DEVICE");
+        direction_name = "capture";
         break;
     }
 
-    CHECK_A(snd_pcm_hw_params_malloc, (&hw_params));
-    CHECK_A(snd_pcm_hw_params_any, (s->ph, hw_params));
-    CHECK_A(snd_pcm_hw_params_set_access, (s->ph, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED));
-    CHECK_A(snd_pcm_hw_params_set_format, (s->ph, hw_params, pa_format_to_alsa(s->ss.format)));
-    CHECK_A(snd_pcm_hw_params_set_rate_resample, (s->ph, hw_params, 1));
-    rate = s->ss.rate;
-    dir = 0;
-    CHECK_A(snd_pcm_hw_params_set_rate_near, (s->ph, hw_params, &rate, &dir));
-    CHECK_A(snd_pcm_hw_params_set_channels, (s->ph, hw_params, s->ss.channels));
+    if (device_name == NULL)
+        device_name = "default";
 
-    unsigned int period_time = 20 * 1000;
-    dir = 1;
-    CHECK_A(snd_pcm_hw_params_set_period_time_near, (s->ph, hw_params, &period_time, &dir));
+    char *device_description = g_strdup_printf("%s device \"%s\"", direction_name, device_name);
+    if (!device_description) {
+        trace_error("%s: can't allocate memory for device description string\n", __func__);
+        goto fatal_error;
+    }
 
-    unsigned int buffer_time = 4 * period_time;
-    dir = 1;
-    CHECK_A(snd_pcm_hw_params_set_buffer_time_near, (s->ph, hw_params, &buffer_time, &dir));
-    CHECK_A(snd_pcm_hw_params, (s->ph, hw_params));
+    errcode = snd_pcm_open(&s->ph, device_name, stream_direction, 0);
+    if (errcode != 0) {
+        trace_error("%s: can't open %s. Error code %d (%s)\n", __func__, device_description,
+                    errcode, snd_strerror(errcode));
+        goto fatal_error;
+    }
+
+    errcode = snd_pcm_hw_params_malloc(&hw_params);
+    if (errcode != 0) {
+        trace_error("%s: can't allocate memory for hw parameters for %s. Error code %d (%s)\n",
+                    __func__, device_description, errcode, snd_strerror(errcode));
+        goto fatal_error;
+    }
+
+    errcode = snd_pcm_hw_params_any(s->ph, hw_params);
+    if (errcode != 0) {
+        trace_error("%s: can't get initial hw parameters for %s. Error code %d (%s)\n", __func__,
+                    device_description, errcode, snd_strerror(errcode));
+        goto fatal_error;
+    }
+
+    errcode = snd_pcm_hw_params_set_access(s->ph, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED);
+    if (errcode != 0) {
+        trace_error("%s: can't select interleaved mode for %s. Error code %d (%s)\n", __func__,
+                    device_description, errcode, snd_strerror(errcode));
+        // TODO: is it worth to support non-interleaved mode?
+        goto fatal_error;
+    }
+
+    errcode = snd_pcm_hw_params_set_format(s->ph, hw_params, pa_format_to_alsa(s->ss.format));
+    if (errcode != 0) {
+        snd_pcm_format_t alsa_format = pa_format_to_alsa(s->ss.format);
+        trace_error("%s: can't set sample format %d (\"%s\") for %s. Error code %d (%s)\n",
+                    __func__, alsa_format, snd_pcm_format_name(alsa_format), device_description,
+                    errcode, snd_strerror(errcode));
+        goto fatal_error;
+    }
+
+    errcode = snd_pcm_hw_params_set_rate_resample(s->ph, hw_params, 1);
+    if (errcode != 0) {
+        trace_error("%s: can't enable rate resample for %s. Error code %d (%s)\n", __func__,
+                    device_description, errcode, snd_strerror(errcode));
+        // This is not a fatal error. Audio speed will be wrong, but there will be something.
+        // And it sounds funny.
+    }
+
+    unsigned int rate = s->ss.rate;
+    int dir = 0;
+
+    errcode = snd_pcm_hw_params_set_rate_near(s->ph, hw_params, &rate, &dir);
+    if (errcode != 0) {
+        trace_error("%s: can't set sample rate for %s. Error code %d (%s)\n", __func__,
+                    device_description, errcode, snd_strerror(errcode));
+        goto fatal_error;
+    }
+
+    trace_info_f("%s: demanded %d Hz sample rate, got %d Hz for %s, dir = %d\n", __func__,
+                 (int)s->ss.rate, (int)rate, device_description, dir);
+
+    if (rate != s->ss.rate)
+        trace_error("%s: actual sample rate, %d Hz, differs from required %d Hz\n", __func__,
+                    (int)rate, (int)s->ss.rate);
+
+    errcode = snd_pcm_hw_params_set_channels(s->ph, hw_params, s->ss.channels);
+    if (errcode != 0) {
+        trace_error("%s: can't set channel count to %d for %s. Error code %d (%s)\n", __func__,
+                    (int)s->ss.channels, device_description, errcode, snd_strerror(errcode));
+        // TODO: channel count handling?
+        goto fatal_error;
+    }
+
+    const size_t frame_size = pa_frame_size(&s->ss);
+    snd_pcm_uframes_t requested_period_size = s->buffer_attr.minreq / frame_size;
+    snd_pcm_uframes_t period_size = requested_period_size;
+    dir = 1;  // Prefer larger period sizes, if exact is not possible.
+    errcode = snd_pcm_hw_params_set_period_size_near(s->ph, hw_params, &period_size, &dir);
+    if (errcode != 0) {
+        trace_error("%s: can't set period size to %d frames for %s. Error code %d (%s)\n", __func__,
+                    (int)requested_period_size, device_description, errcode, snd_strerror(errcode));
+        goto fatal_error;
+    }
+
+    trace_info_f("%s: requested period size of %d frames, got %d frames for %s\n", __func__,
+                 (int)requested_period_size, (int)period_size, device_description);
+
+    snd_pcm_uframes_t requested_buffer_size = s->buffer_attr.tlength / frame_size;
+    snd_pcm_uframes_t buffer_size = requested_buffer_size;
+    errcode = snd_pcm_hw_params_set_buffer_size_near(s->ph, hw_params, &buffer_size);
+    if (errcode != 0) {
+        trace_error(
+            "%s: can't set buffer size to %d frames for %s. Error code %d (%s)\n",
+            __func__, (int)buffer_size, device_description, errcode, snd_strerror(errcode));
+        goto fatal_error;
+    }
+
+    trace_info_f("%s: requested buffer size of %d frames, got %d frames for %s\n", __func__,
+                 (int)requested_buffer_size, (int)buffer_size, device_description);
+
+    errcode = snd_pcm_hw_params(s->ph, hw_params);
+    if (errcode != 0) {
+        trace_error("%s: can't apply configured hw parameter block for %s\n", __func__,
+                    device_description);
+        goto fatal_error;
+    }
+
     snd_pcm_hw_params_free(hw_params);
 
-    CHECK_A(snd_pcm_sw_params_malloc, (&sw_params));
-    CHECK_A(snd_pcm_sw_params_current, (s->ph, sw_params));
+    errcode = snd_pcm_sw_params_malloc(&sw_params);
+    if (errcode != 0) {
+        trace_error("%s: can't allocate memory for sw parameters for %s\n", __func__,
+                    device_description);
+        goto fatal_error;
+    }
 
-    const snd_pcm_uframes_t period_size = (uint64_t)period_time * rate / (1000 * 1000);
-    CHECK_A(snd_pcm_sw_params_set_avail_min, (s->ph, sw_params, period_size));
+    errcode = snd_pcm_sw_params_current(s->ph, sw_params);
+    if (errcode != 0) {
+        trace_error("%s: can't acquire current sw parameters for %s\n", __func__,
+                    device_description);
+        goto fatal_error;
+    }
+
+    errcode = snd_pcm_sw_params_set_avail_min(s->ph, sw_params, period_size);
+    if (errcode != 0) {
+        trace_error("%s: can't set avail min for %s\n", __func__, device_description);
+        goto fatal_error;
+    }
+
     // no period event requested
-    CHECK_A(snd_pcm_sw_params, (s->ph, sw_params));
+
+    errcode = snd_pcm_sw_params(s->ph, sw_params);
+    if (errcode != 0) {
+        trace_error("%s: can't apply sw parameters for %s\n", __func__, device_description);
+        goto fatal_error;
+    }
+
     snd_pcm_sw_params_free(sw_params);
 
-    CHECK_A(snd_pcm_prepare, (s->ph));
+    errcode = snd_pcm_prepare(s->ph);
+    if (errcode != 0) {
+        trace_error("%s: can't prepare PCM device to use for %s\n", __func__, device_description);
+        goto fatal_error;
+    }
 
     int nfds = snd_pcm_poll_descriptors_count(s->ph);
     struct pollfd *fds = calloc(nfds, sizeof(struct pollfd));
@@ -248,8 +359,19 @@ do_connect_pcm(pa_stream *s, snd_pcm_stream_t stream_direction)
     pa_stream_ref(s);
     s->c->mainloop_api->defer_new(s->c->mainloop_api, deh_stream_first_readwrite_callback, s);
 
+    g_free(device_description);
     return 0;
-err:
+
+fatal_error:
+    trace_error(
+        "%s: failed to open ALSA device. Apulse does no resampling or format conversion, leaving "
+        "that task to ALSA plugins. Ensure that selected device is capable of playing a particular "
+        "sample format at a particular rate. They have to be supported by either hardware "
+        "directly, or by \"plug\" and \"dmix\" ALSA plugins which will perform required "
+        "conversions on CPU.\n",
+        __func__);
+
+    g_free(device_description);
     return -1;
 }
 
@@ -286,6 +408,72 @@ pa_stream_cancel_write(pa_stream *p)
     return 0;
 }
 
+static void
+stream_adjust_buffer_attrs(pa_stream *s, const pa_buffer_attr *attr)
+{
+    pa_buffer_attr *ba = &s->buffer_attr;
+    const size_t frame_size = pa_frame_size(&s->ss);
+
+    if (attr) {
+        *ba = *attr;
+    } else {
+        // If client passed NULL, all parameters have default values.
+        ba->maxlength = (uint32_t)-1;
+        ba->tlength = (uint32_t)-1;
+        ba->prebuf = (uint32_t)-1;
+        ba->minreq = (uint32_t)-1;
+        ba->fragsize = (uint32_t)-1;
+    }
+
+    // Adjust default values.
+    // Overall buffer length.
+    if (ba->maxlength == (uint32_t)-1)
+        ba->maxlength = 4 * 1024 * 1024;
+
+    if (ba->maxlength == 0)
+        ba->maxlength = frame_size;
+
+    // Target length of a buffer.
+    if (ba->tlength == (uint32_t)-1)
+        ba->tlength = pa_usec_to_bytes(2 * 1000 * 1000, &s->ss);
+
+    if (ba->tlength == 0)
+        ba->tlength = frame_size;
+
+    ba->tlength = MIN(ba->tlength, ba->maxlength);
+
+    // Minimum request (playback).
+    if (ba->minreq == (uint32_t)-1) {
+        ba->minreq = pa_usec_to_bytes(20 * 1000, &s->ss);
+        ba->minreq = MIN(ba->minreq, ba->tlength / 4);
+    }
+
+    if (ba->minreq == 0)
+        ba->minreq = frame_size;
+
+    // Fragment size (recording).
+    if (ba->fragsize == (uint32_t)-1) {
+        ba->fragsize = pa_usec_to_bytes(20 * 1000, &s->ss);
+    }
+
+    if (ba->fragsize == 0)
+        ba->fragsize = frame_size;
+
+    // Pre-buffering.
+    if (ba->prebuf == (uint32_t)-1)
+        ba->prebuf = ba->tlength - ba->minreq;
+
+    if (ba->prebuf > ba->tlength - ba->minreq)
+        ba->prebuf = ba->tlength - ba->minreq;
+
+    // Ensure values are all multiple of |frame_size|.
+    ba->maxlength = pa_find_multiple_of(ba->maxlength, frame_size, 1);
+    ba->tlength = pa_find_multiple_of(ba->tlength, frame_size, 1);
+    ba->prebuf = pa_find_multiple_of(ba->prebuf, frame_size, 1);
+    ba->minreq = pa_find_multiple_of(ba->minreq, frame_size, 1);
+    ba->fragsize = pa_find_multiple_of(ba->fragsize, frame_size, 1);
+}
+
 APULSE_EXPORT
 int
 pa_stream_connect_playback(pa_stream *s, const char *dev, const pa_buffer_attr *attr,
@@ -298,15 +486,7 @@ pa_stream_connect_playback(pa_stream *s, const char *dev, const pa_buffer_attr *
     g_free(s_attr);
 
     s->direction = PA_STREAM_PLAYBACK;
-    if (attr) {
-        s->buffer_attr = *attr;
-    } else {
-        s->buffer_attr.maxlength = (uint32_t)-1;
-        s->buffer_attr.tlength = (uint32_t)-1;
-        s->buffer_attr.prebuf = (uint32_t)-1;
-        s->buffer_attr.minreq = (uint32_t)-1;
-        s->buffer_attr.fragsize = (uint32_t)-1;
-    }
+    stream_adjust_buffer_attrs(s, attr);
 
     if (do_connect_pcm(s, SND_PCM_STREAM_PLAYBACK) != 0)
         goto err;
@@ -759,7 +939,7 @@ pa_stream_writable_size(pa_stream *s)
     if (writable_size < limit)
         writable_size = 0;
 
-    return pa_find_multiple_of(writable_size, pa_frame_size(&s->ss));
+    return pa_find_multiple_of(writable_size, pa_frame_size(&s->ss), 0);
 }
 
 APULSE_EXPORT
@@ -769,7 +949,7 @@ pa_stream_readable_size(pa_stream *s)
     trace_info_f("F %s s=%p\n", __func__, s);
 
     size_t readable_size = ringbuffer_readable_size(s->rb);
-    return pa_find_multiple_of(readable_size, pa_frame_size(&s->ss));
+    return pa_find_multiple_of(readable_size, pa_frame_size(&s->ss), 0);
 }
 
 APULSE_EXPORT
@@ -810,15 +990,7 @@ pa_stream_connect_record(pa_stream *s, const char *dev, const pa_buffer_attr *at
     g_free(s_attr);
 
     s->direction = PA_STREAM_RECORD;
-    if (attr) {
-        s->buffer_attr = *attr;
-    } else {
-        s->buffer_attr.maxlength = (uint32_t)-1;
-        s->buffer_attr.tlength = (uint32_t)-1;
-        s->buffer_attr.prebuf = (uint32_t)-1;
-        s->buffer_attr.minreq = (uint32_t)-1;
-        s->buffer_attr.fragsize = (uint32_t)-1;
-    }
+    stream_adjust_buffer_attrs(s, attr);
 
     if (do_connect_pcm(s, SND_PCM_STREAM_CAPTURE) != 0)
         goto err;
