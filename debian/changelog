@@ -1,11 +1,23 @@
-apulse (0.1.6-1~bpo8+1) jessie-backports; urgency=medium
+apulse (0.1.9-1) unstable; urgency=medium
 
-  * Rebuild for jessie-backports.
+  * New upstream release.
 
- -- Mateusz Łukasik <mati75@linuxmint.pl>  Sun, 28 Jun 2015 17:04:23 +0200
+ -- Mateusz Łukasik <mati75@linuxmint.pl>  Thu, 16 Mar 2017 07:51:20 +0100
 
-apulse (0.1.6-1) unstable; urgency=medium
+apulse (0.1.8-1) unstable; urgency=medium
+
+  * New upstream release.
+  * debian/control:
+    + Bump dh version to 10.
+    + Bump Standards-Version to 3.9.8.
+    + Use secured VCS links.
+  * debian/rules: Enable hardening.
+  * Drop lintian-override.
+
+ -- Mateusz Łukasik <mati75@linuxmint.pl>  Thu, 09 Mar 2017 08:00:45 +0100
+
+apulse (0.1.7-1) unstable; urgency=medium
 
   * Initial release. (Closes: #775098)
 
- -- Mateusz Łukasik <mati75@linuxmint.pl>  Wed, 17 Jun 2015 08:25:26 +0200
+ -- Mateusz Łukasik <mati75@linuxmint.pl>  Tue, 22 Dec 2015 22:07:49 +0100

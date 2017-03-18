@@ -36,7 +36,6 @@ static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 void
 trace_info(const char *fmt, ...)
 {
-#ifdef WITH_TRACE
     pthread_mutex_lock(&lock);
     va_list args;
     struct timeval tv;
@@ -46,7 +45,6 @@ trace_info(const char *fmt, ...)
     vfprintf(stdout, fmt, args);
     va_end(args);
     pthread_mutex_unlock(&lock);
-#endif
 }
 
 void
@@ -64,17 +62,31 @@ trace_warning(const char *fmt, ...)
 void
 trace_error(const char *fmt, ...)
 {
+    static int stdout_tested = 0;
+    static int stdout_is_a_tty = 0;
+
     pthread_mutex_lock(&lock);
+
+    if (!stdout_tested) {
+        stdout_is_a_tty = isatty(1);
+        stdout_tested = 1;
+    }
+
     va_list args;
     fprintf(stderr, "[apulse] [error] ");
     va_start(args, fmt);
     vfprintf(stderr, fmt, args);
     va_end(args);
 
-    fprintf(stdout, "[apulse] [error] ");
-    va_start(args, fmt);
-    vfprintf(stdout, fmt, args);
-    va_end(args);
+    if (!stdout_is_a_tty) {
+        // If stdout is redirected to a file, make sure it also gets error messages.
+        // That helps to figure out where errors were.
+        fprintf(stdout, "[apulse] [error] ");
+        va_start(args, fmt);
+        vfprintf(stdout, fmt, args);
+        va_end(args);
+    }
+
     pthread_mutex_unlock(&lock);
 }
 
@@ -91,6 +103,25 @@ trace_pa_buffer_attr_as_string(const pa_buffer_attr *attr)
     }
 
     return res;
+}
+
+gchar *
+trace_pa_volume_as_string(const pa_cvolume *v)
+{
+    const unsigned int channel_count = MIN(v->channels, PA_CHANNELS_MAX);
+    GString *s = g_string_new(NULL);
+
+    g_string_append_printf(s, "%d:{", v->channels);
+    for (unsigned int k = 0; k < channel_count ; k ++) {
+        if (k != 0)
+            g_string_append(s, ", ");
+
+        g_string_append_printf(s, "%u", v->values[k]);
+    }
+
+    g_string_append(s, "}");
+
+    return g_string_free(s, FALSE);
 }
 
 void
