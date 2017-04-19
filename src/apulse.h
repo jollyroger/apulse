@@ -46,7 +46,6 @@ struct pa_context {
     int                     next_stream_idx;
     GHashTable             *streams_ht;
     pa_volume_t             source_volume[PA_CHANNELS_MAX];
-    pa_volume_t             sink_volume[PA_CHANNELS_MAX];
 };
 
 struct pa_io_event {
@@ -62,8 +61,9 @@ struct pa_io_event {
 
 struct pa_mainloop {
     pa_mainloop_api     api;
-    GQueue             *queue;
-    GHashTable         *events_ht;
+    GQueue             *deferred_events_queue;
+    GQueue             *timed_events_queue;
+    GHashTable         *events_ht;  ///< a set of (pa_io_event *)
     struct pollfd      *fds;
     nfds_t              nfds;
     int                 recreate_fds; ///< 1 if fds array needs to be recreated from events_ht
@@ -114,6 +114,7 @@ struct pa_stream {
     size_t                  peek_buffer_data_len;
     void                   *write_buffer;
     volatile int            paused;
+    pa_volume_t             volume[PA_CHANNELS_MAX];
 };
 
 struct pa_operation {
@@ -123,6 +124,7 @@ struct pa_operation {
     pa_sink_info_cb_t       sink_info_cb;
     pa_context_success_cb_t context_success_cb;
     pa_server_info_cb_t     server_info_cb;
+    pa_source_info_cb_t     source_info_cb;
     void                   *cb_userdata;
 
     pa_mainloop_api *api;
@@ -148,6 +150,14 @@ struct pa_defer_event {
     pa_mainloop            *mainloop;
 };
 
+struct pa_time_event {
+    int                         enabled;
+    struct timeval              when;
+    pa_time_event_cb_t          cb;
+    void                       *userdata;
+    pa_mainloop                *mainloop;
+    pa_time_event_destroy_cb_t  destroy_cb;
+};
 
 pa_operation *
 pa_operation_new(pa_mainloop_api *api, void (*handler)(pa_operation *op));

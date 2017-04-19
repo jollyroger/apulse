@@ -91,6 +91,64 @@ data_available_for_stream(pa_mainloop_api *a, pa_io_event *ioe, int fd, pa_io_ev
                 ret = snd_pcm_recover(s->ph, frame_count, 1);
             } while (ret == -1 && errno == EINTR && cnt < 5);
 
+            switch (snd_pcm_state(s->ph)) {
+            case SND_PCM_STATE_OPEN:
+                // Highly unlikely device will be here in this state. But if it is, there is nothing
+                // can be done.
+                trace_error(
+                    "Stream '%s' of context '%s' have its associated PCM device in "
+                    "SND_PCM_STATE_OPEN state. Reconfiguration is required, but is not possible at "
+                    "the moment. Giving up.",
+                    s->name ? s->name : "", s->c->name ? s->c->name : "");
+                break;
+
+            case SND_PCM_STATE_SETUP:
+                // There is configuration, but device is not prepared and not started.
+                snd_pcm_prepare(s->ph);
+                snd_pcm_start(s->ph);
+                break;
+
+            case SND_PCM_STATE_PREPARED:
+                // Device prepared, but not started.
+                snd_pcm_start(s->ph);
+                break;
+
+            case SND_PCM_STATE_RUNNING:
+                // That's the expected state.
+                break;
+
+            case SND_PCM_STATE_XRUN:
+                trace_error(
+                    "Stream '%s' of context '%s' have its associated device in SND_PCM_STATE_XRUN "
+                    "state even after xrun recovery.",
+                    s->name ? s->name : "", s->c->name ? s->c->name : "");
+                break;
+
+            case SND_PCM_STATE_DRAINING:
+                trace_error(
+                    "Stream '%s' of context '%s' have its associated device in "
+                    "SND_PCM_STATE_DRAINING state, which is highly unusual.",
+                    s->name ? s->name : "", s->c->name ? s->c->name : "");
+                break;
+
+            case SND_PCM_STATE_PAUSED:
+                // Resume from paused state.
+                snd_pcm_pause(s->ph, 0);
+                break;
+
+            case SND_PCM_STATE_SUSPENDED:
+                // Resume from suspended state.
+                snd_pcm_resume(s->ph);
+                break;
+
+            case SND_PCM_STATE_DISCONNECTED:
+                trace_error(
+                    "Stream '%s' of context '%s' have its associated device in "
+                    "SND_PCM_STATE_DISCONNECTED state. Giving up.",
+                    s->name ? s->name : "", s->c->name ? s->c->name : "");
+                break;
+            }
+
 #if HAVE_SND_PCM_AVAIL
             frame_count = snd_pcm_avail(s->ph);
 #else
@@ -124,7 +182,7 @@ data_available_for_stream(pa_mainloop_api *a, pa_io_event *ioe, int fd, pa_io_ev
             size_t bytecnt = MIN(buf_size, frame_count * frame_size);
             bytecnt = ringbuffer_read(s->rb, buf, bytecnt);
 
-            pa_apply_volume_multiplier(buf, bytecnt, s->c->sink_volume, &s->ss);
+            pa_apply_volume_multiplier(buf, bytecnt, s->volume, &s->ss);
 
             if (bytecnt == 0) {
                 // application is not ready yet, play silence
@@ -282,8 +340,9 @@ do_connect_pcm(pa_stream *s, snd_pcm_stream_t stream_direction)
     trace_info_f("%s: requested period size of %d frames, got %d frames for %s\n", __func__,
                  (int)requested_period_size, (int)period_size, device_description);
 
+    // Set up buffer size. Ensure it's at least four times larger than a period size.
     snd_pcm_uframes_t requested_buffer_size = s->buffer_attr.tlength / frame_size;
-    snd_pcm_uframes_t buffer_size = requested_buffer_size;
+    snd_pcm_uframes_t buffer_size = MAX(requested_buffer_size, 4 * period_size);
     errcode = snd_pcm_hw_params_set_buffer_size_near(s->ph, hw_params, &buffer_size);
     if (errcode != 0) {
         trace_error(
@@ -379,12 +438,15 @@ APULSE_EXPORT
 int
 pa_stream_begin_write(pa_stream *p, void **data, size_t *nbytes)
 {
-    trace_info_f("F %s p=%p\n", __func__, p);
+    trace_info_f("F %s p=%p nbytes=%p(%" PRIu64 ")\n", __func__, p, nbytes,
+                 (uint64_t)(nbytes ? *nbytes : 0));
 
     free(p->write_buffer);
 
     if (*nbytes == (size_t)-1)
         *nbytes = 8192;
+
+    *nbytes = pa_find_multiple_of(*nbytes, pa_frame_size(&p->ss), 0);
 
     p->write_buffer = malloc(*nbytes);
 
@@ -775,6 +837,9 @@ pa_stream_new_with_proplist(pa_context *c, const char *name, const pa_sample_spe
 
     s->rb = ringbuffer_new(72 * 1024);    // TODO: figure out size
     s->peek_buffer = malloc(s->rb->end - s->rb->start);
+
+    for (uint32_t k = 0; k < PA_CHANNELS_MAX; k++)
+        s->volume[k] = PA_VOLUME_NORM;
 
     return s;
 }

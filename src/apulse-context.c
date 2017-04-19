@@ -132,9 +132,27 @@ pa_context_get_server_protocol_version(pa_context *c)
     return 8;   // PA headers say "8" is the protocol version used in PulseAudio 0.9
 }
 
-static void
-pa_context_get_sink_info_by_name_impl(pa_operation *op)
+static pa_sink_info
+pai_fill_default_sink_info(void)
 {
+    static pa_proplist *proplist = NULL;
+
+    if (!proplist) {
+        // TODO: free memory
+        proplist = pa_proplist_new();
+    }
+
+    static pa_sink_port_info sink_port = {
+        .name = "ALSA sink",
+        .description = "ALSA sink",
+        .priority = 1,
+        .available = PA_PORT_AVAILABLE_YES,
+    };
+
+    static pa_sink_port_info *sink_ports[] = {
+        &sink_port,
+    };
+
     // TODO: real data
     pa_sink_info info = {
         .name = "default_sink_name",
@@ -162,23 +180,32 @@ pa_context_get_sink_info_by_name_impl(pa_operation *op)
         },
         .mute = 0,
         .monitor_source = 0,
-        .monitor_source_name = "monitor_source_name",
+        .monitor_source_name = NULL,
         .latency = 100000,
         .driver = "apulse",
         .flags = 0,
-        .proplist = NULL,
+        .proplist = proplist,
         .configured_latency = 100000,
         .base_volume = PA_VOLUME_NORM,
         .state = PA_SINK_RUNNING,
         .n_volume_steps = 0,
-        .card = PA_INVALID_INDEX,
-        .n_ports = 0,
-        .ports = NULL,
-        .active_port = NULL,
+        .card = 0,
+        .n_ports = 1,
+        .ports = sink_ports,
+        .active_port = &sink_port,
     };
 
+    return info;
+}
+
+static void
+pa_context_get_sink_info_by_name_impl(pa_operation *op)
+{
+    pa_sink_info info = pai_fill_default_sink_info();
+
     if (op->sink_info_cb) {
-        op->sink_info_cb(op->c, &info, 0, op->cb_userdata);
+        if (strcmp(op->char_ptr_arg_1, info.name) == 0)
+            op->sink_info_cb(op->c, &info, 0, op->cb_userdata);
         op->sink_info_cb(op->c, NULL, 1, op->cb_userdata);
     }
 
@@ -197,6 +224,192 @@ pa_context_get_sink_info_by_name(pa_context *c, const char *name, pa_sink_info_c
     pa_operation *op = pa_operation_new(c->mainloop_api, pa_context_get_sink_info_by_name_impl);
     op->c = c;
     op->char_ptr_arg_1 = strdup(name ? name : "");
+    op->sink_info_cb = cb;
+    op->cb_userdata = userdata;
+
+    pa_operation_launch(op);
+    return op;
+}
+
+static void
+pa_context_get_sink_info_list_impl(pa_operation *op)
+{
+    pa_sink_info info = pai_fill_default_sink_info();
+
+    if (op->sink_info_cb) {
+        op->sink_info_cb(op->c, &info, 0, op->cb_userdata);
+        op->sink_info_cb(op->c, NULL, 1, op->cb_userdata);
+    }
+
+    pa_operation_done(op);
+}
+
+APULSE_EXPORT
+pa_operation *
+pa_context_get_sink_info_list(pa_context *c, pa_sink_info_cb_t cb, void *userdata)
+{
+    trace_info_f("F %s c=%p, cb=%p, userdata=%p\n", __func__, c, cb, userdata);
+
+    pa_operation *op = pa_operation_new(c->mainloop_api, pa_context_get_sink_info_list_impl);
+    op->c = c;
+    op->sink_info_cb = cb;
+    op->cb_userdata = userdata;
+
+    pa_operation_launch(op);
+    return op;
+}
+
+static pa_source_info
+pai_fill_default_source_info(void)
+{
+    static pa_proplist *proplist = NULL;
+
+    if (!proplist) {
+        // TODO: free memory
+        proplist = pa_proplist_new();
+    }
+
+    static pa_source_port_info source_port = {
+        .name = "ALSA source",
+        .description = "ALSA source",
+        .priority = 1,
+        .available = PA_PORT_AVAILABLE_YES,
+    };
+
+    static pa_source_port_info *source_ports[] = {
+        &source_port,
+    };
+
+    // TODO: real data
+    pa_source_info info = {
+        .name = "default_source_name",
+        .index = 0,
+        .description = "default_source_name",
+        .sample_spec = {
+            .format = PA_SAMPLE_S16LE,
+            .rate = 44100,
+            .channels = 2,
+        },
+        .channel_map = {
+            .channels = 2,
+            .map = {
+                PA_CHANNEL_POSITION_FRONT_LEFT,
+                PA_CHANNEL_POSITION_FRONT_RIGHT,
+            },
+        },
+        .owner_module = PA_INVALID_INDEX,
+        .volume = {
+            .channels = 2,
+            .values = {
+                PA_VOLUME_NORM,
+                PA_VOLUME_NORM,
+            },
+        },
+        .mute = 0,
+        .monitor_of_sink = 0,
+        .monitor_of_sink_name = NULL,
+        .latency = 100000, // TODO: where to get latency figures?
+        .driver = "apulse",
+        .flags = 0,
+        .proplist = proplist,
+        .configured_latency = 100000,
+        .base_volume = PA_VOLUME_NORM,
+        .state = PA_SOURCE_RUNNING,
+        .n_volume_steps = 0,
+        .card = PA_INVALID_INDEX,
+        .n_ports = 1,
+        .ports = source_ports,
+        .active_port = &source_port,
+        .n_formats = 0,
+        .formats = NULL,
+    };
+
+    return info;
+}
+
+static void
+pa_context_get_source_info_list_impl(pa_operation *op)
+{
+    pa_source_info info = pai_fill_default_source_info();
+
+    if (op->source_info_cb) {
+        op->source_info_cb(op->c, &info, 0, op->cb_userdata);
+        op->source_info_cb(op->c, NULL, 1, op->cb_userdata);
+    }
+
+    pa_operation_done(op);
+}
+
+APULSE_EXPORT
+pa_operation *
+pa_context_get_source_info_list(pa_context *c, pa_source_info_cb_t cb, void *userdata)
+{
+    trace_info_f("F %s c=%p, cb=%p, userdata=%p\n", __func__, c, cb, userdata);
+
+    pa_operation *op = pa_operation_new(c->mainloop_api, pa_context_get_source_info_list_impl);
+    op->c = c;
+    op->source_info_cb = cb;
+    op->cb_userdata = userdata;
+
+    pa_operation_launch(op);
+    return op;
+}
+
+static void
+pa_context_get_source_info_by_name_impl(pa_operation *op)
+{
+    pa_source_info info = pai_fill_default_source_info();
+
+    if (op->source_info_cb) {
+        if (strcmp(op->char_ptr_arg_1, info.name) == 0)
+            op->source_info_cb(op->c, &info, 0, op->cb_userdata);
+        op->source_info_cb(op->c, NULL, 1, op->cb_userdata);
+    }
+
+    free(op->char_ptr_arg_1);
+    pa_operation_done(op);
+}
+
+APULSE_EXPORT
+pa_operation *
+pa_context_get_source_info_by_name(pa_context *c, const char *name, pa_source_info_cb_t cb,
+                                   void *userdata)
+{
+    trace_info_f("F %s c=%p, name=%s, cb=%p, userdata=%p\n", __func__, c, name, cb, userdata);
+
+    pa_operation *op = pa_operation_new(c->mainloop_api, pa_context_get_source_info_by_name_impl);
+    op->c = c;
+    op->char_ptr_arg_1 = strdup(name ? name : "");
+    op->source_info_cb = cb;
+    op->cb_userdata = userdata;
+
+    pa_operation_launch(op);
+    return op;
+}
+
+static void
+pa_context_get_sink_info_by_index_impl(pa_operation *op)
+{
+    pa_sink_info info = pai_fill_default_sink_info();
+
+    if (op->sink_info_cb) {
+        if (op->int_arg_1 == info.index)
+            op->sink_info_cb(op->c, &info, 0, op->cb_userdata);
+        op->sink_info_cb(op->c, NULL, 1, op->cb_userdata);
+    }
+
+    pa_operation_done(op);
+}
+
+APULSE_EXPORT
+pa_operation *
+pa_context_get_sink_info_by_index(pa_context *c, uint32_t idx, pa_sink_info_cb_t cb, void *userdata)
+{
+    trace_info_f("F %s c=%p, idx=%u, cb=%p, userdata=%p\n", __func__, c, idx, cb, userdata);
+
+    pa_operation *op = pa_operation_new(c->mainloop_api, pa_context_get_sink_info_by_index_impl);
+    op->c = c;
+    op->int_arg_1 = idx;
     op->sink_info_cb = cb;
     op->cb_userdata = userdata;
 
@@ -300,7 +513,6 @@ pa_context_new_with_proplist(pa_mainloop_api *mainloop_api, const char *name, pa
     c->streams_ht = g_hash_table_new(g_direct_hash, g_direct_equal);
 
     for (uint32_t k = 0; k < PA_CHANNELS_MAX; k++) {
-        c->sink_volume[k] = PA_VOLUME_NORM;
         c->source_volume[k] = PA_VOLUME_NORM;
     }
 
@@ -323,9 +535,15 @@ APULSE_EXPORT
 pa_time_event *
 pa_context_rttime_new(pa_context *c, pa_usec_t usec, pa_time_event_cb_t cb, void *userdata)
 {
-    trace_info_z("Z %s c=%p, usec=%" PRIu64 " cb=%p, userdata=%p\n", __func__, c, (uint64_t)usec,
+    trace_info_f("F %s c=%p, usec=%" PRIu64 " cb=%p, userdata=%p\n", __func__, c, (uint64_t)usec,
                  cb, userdata);
-    return NULL;
+
+    struct timeval when = {
+        .tv_sec = usec / PA_USEC_PER_SEC,
+        .tv_usec = usec % PA_USEC_PER_SEC,
+    };
+
+    return c->mainloop_api->time_new(c->mainloop_api, &when, cb, userdata);
 }
 
 APULSE_EXPORT
@@ -342,12 +560,23 @@ pa_context_set_sink_input_mute(pa_context *c, uint32_t idx, int mute, pa_context
 static void
 pa_context_set_sink_input_volume_impl(pa_operation *op)
 {
-    memset(&op->c->sink_volume, 0, sizeof(op->c->sink_volume));
+    uint32_t idx = op->int_arg_1;
+    pa_stream *s = g_hash_table_lookup(op->c->streams_ht, GINT_TO_POINTER(idx));
+
+    if (!s) {
+        // Can't find a stream with selected index.
+        if (op->context_success_cb)
+            op->context_success_cb(op->c, 0, op->cb_userdata);
+
+        return;
+    }
+
+    memset(s->volume, 0, sizeof(s->volume));
 
     const uint32_t channels = MIN(op->pa_cvolume_arg_1.channels, PA_CHANNELS_MAX);
 
     for (uint32_t k = 0; k < channels; k++)
-        op->c->sink_volume[k] = op->pa_cvolume_arg_1.values[k];
+        s->volume[k] = op->pa_cvolume_arg_1.values[k];
 
     if (op->context_success_cb)
         op->context_success_cb(op->c, 1, op->cb_userdata);
